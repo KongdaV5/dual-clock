@@ -34,7 +34,7 @@
 ## 安装
 
 ```bash
-cd ~/Downloads/DualClock-v3.3.6-time-sync-calendar-fix
+cd ~/Developer/Tools/DualClock
 ./install.command
 ```
 
