@@ -97,7 +97,9 @@ static void FillRounded(NSRect rect, CGFloat radius, NSColor *color) {
 }
 
 static NSColor *PanelBG(void) {
-    return NSColor.windowBackgroundColor;
+    // The popover's NSVisualEffectView owns the surface. Keep the calendar
+    // canvas transparent so the system material can show through it.
+    return NSColor.clearColor;
 }
 
 static const CGFloat kPanelWidth = 336.0;
@@ -701,6 +703,7 @@ static NSString *CalendarSubLabel(NSDate *date) {
 
 @interface CalendarPopoverController : NSViewController <CalendarPanelDelegate>
 @property(nonatomic, strong) CalendarPanelView *panel;
+@property(nonatomic, strong) NSVisualEffectView *materialView;
 @property(nonatomic, weak) NSPopover *popover;
 - (void)resizeToPanel;
 @end
@@ -708,15 +711,26 @@ static NSString *CalendarSubLabel(NSDate *date) {
 @implementation CalendarPopoverController
 
 - (void)loadView {
+    self.materialView = [[NSVisualEffectView alloc] initWithFrame:NSMakeRect(0, 0, kPanelWidth, 400)];
+    self.materialView.material = NSVisualEffectMaterialPopover;
+    self.materialView.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+    self.materialView.state = NSVisualEffectStateActive;
+    self.materialView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+
     self.panel = [[CalendarPanelView alloc] initWithFrame:NSMakeRect(0, 0, kPanelWidth, 400)];
     self.panel.delegate = self;
-    self.view = self.panel;
+    self.panel.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    [self.materialView addSubview:self.panel];
+    self.view = self.materialView;
     [self resizeToPanel];
 }
 
 - (void)resizeToPanel {
     CGFloat h = [self.panel preferredHeight];
-    self.panel.frame = NSMakeRect(0, 0, kPanelWidth, h);
+    NSRect frame = NSMakeRect(0, 0, kPanelWidth, h);
+    self.materialView.frame = frame;
+    self.panel.frame = self.materialView.bounds;
+    self.view.frame = frame;
     self.preferredContentSize = NSMakeSize(kPanelWidth, h);
     if (self.popover) self.popover.contentSize = NSMakeSize(kPanelWidth, h);
     [self.panel setNeedsDisplay:YES];
@@ -1010,6 +1024,17 @@ static NSString *CalendarSubLabel(NSDate *date) {
     _calendarController.popover = _popover;
 }
 
+- (void)configurePopoverWindow {
+    NSWindow *window = _popover.contentViewController.view.window;
+    if (!window) return;
+
+    // Let the material view composite against the desktop behind the popover.
+    // NSVisualEffectView still supplies the opaque, accessible fallback when
+    // the user enables Reduce Transparency in macOS settings.
+    window.opaque = NO;
+    window.backgroundColor = NSColor.clearColor;
+}
+
 - (NSRect)statusButtonScreenRect {
     NSStatusBarButton *button = _item.button;
     if (!button.window) return NSZeroRect;
@@ -1105,6 +1130,7 @@ static NSString *CalendarSubLabel(NSDate *date) {
     [_popover showRelativeToRect:_item.button.bounds
                          ofView:_item.button
                   preferredEdge:NSRectEdgeMinY];
+    [self configurePopoverWindow];
     [self startPointerMonitoring];
 }
 
